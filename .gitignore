@@ -1,0 +1,15 @@
+*
+
+# PERMITIR .gitignore
+!.gitignore
+
+# PERMITIR LA CARPETA scripts
+!scripts/
+!scripts/**/
+
+# PERMITIR SOLO SCRIPTS 
+!scripts/**/*.R
+!scripts/**/*.Rmd
+!scripts/**/*.py
+!scripts/**/*.ipynb
+.Rproj.user
