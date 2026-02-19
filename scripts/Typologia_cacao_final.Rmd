@@ -1,30 +1,361 @@
 ---
-title: "Typificacion_Cacao_2"
+title: "Typificacion Cocoa"
 author: "Camilo Ignacio Jaramillo Barrios & Paula Andrea Bermeo Fuquene"
 date: "2026-02-09"
 output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(
+  echo = TRUE,
+  warning = FALSE,
+  message = FALSE
+)
+
+#1. Librerias
+pacman::p_load(corrplot, dplyr, ggcorrplot, mice, naniar, tidyverse, VIM)
+
+getwd()
 ```
 
 ## R Markdown
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+```{r cars}
+# =========================================================
+# 1. Cargar datos
+# =========================================================
+data <- read.csv("Cocoa_socioeconomic.csv",
+                 stringsAsFactors = FALSE,
+                 sep = ";")
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+str(data)
+summary(data)
+colSums(is.na(data))
+
+# Eliminar espacios invisibles
+data <- data %>%
+  mutate(across(where(is.character), trimws))
+
+# Convertir cadenas vacías en NA reales
+data[data == ""] <- NA
+
+# Ahora sí convertir a factor
+data <- data %>%
+  mutate(across(where(is.character), as.factor))
+
+# Verificar
+table(data$CACAO_TENURE, useNA = "always")
+
+# =========================================================
+# 2. Convertir variables cualitativas a factor
+# =========================================================
+library(dplyr)
+
+data <- data %>%
+  mutate(across(where(is.character), as.factor))
+
+sapply(data, class)
+colSums(is.na(data))
+# =========================================================
+# 3. Diagnóstico de valores faltantes
+# =========================================================
+library(tidyverse)
+
+miss_summary <- data %>%
+  summarise(across(everything(), ~ mean(is.na(.)))) %>%
+  pivot_longer(
+    cols = everything(),
+    names_to = "Variable",
+    values_to = "Proporcion_NA"
+  ) %>%
+  arrange(desc(Proporcion_NA))
+
+# Gráfico de proporción de NA
+miss_summary %>%
+  filter(Proporcion_NA > 0) %>%
+  ggplot(aes(x = reorder(Variable, Proporcion_NA),
+             y = Proporcion_NA)) +
+  geom_col(fill = "#2C7FB8") +
+  coord_flip() +
+  scale_y_continuous(labels = scales::percent_format()) +
+  labs(
+    title = "Proporción de valores faltantes por variable",
+    x = "Variable",
+    y = "% de valores faltantes"
+  ) +
+  theme_minimal(base_size = 12)
+
+# Variables con NA
+vars_con_na <- miss_summary %>%
+  filter(Proporcion_NA > 0) %>%
+  pull(Variable)
+
+# Visualización patrón de missing
+if(length(vars_con_na) > 0){
+  library(VIM)
+  VIM::aggr(
+    data[, vars_con_na],
+    numbers = TRUE,
+    prop = TRUE,
+    cex.axis = 0.5,
+    cex.numbers = 0.6,
+    gap = 3,
+    sortVars = TRUE
+  )
+} else {
+  message("No hay variables con valores faltantes.")
+}
+
+# =========================================================
+# 4. Clasificación de niveles de missing
+# =========================================================
+miss_summary <- miss_summary %>%
+  mutate(
+    Categoria_NA = case_when(
+      Proporcion_NA == 0 ~ "0%",
+      Proporcion_NA <= 0.05 ~ "0–5%",
+      Proporcion_NA <= 0.20 ~ "5–20%",
+      TRUE ~ ">20%"
+    )
+  )
+
+miss_summary %>%
+  left_join(
+    tibble(
+      Variable = names(data),
+      Tipo = sapply(data, class)
+    ),
+    by = "Variable"
+  ) %>%
+  count(Tipo, Categoria_NA) %>%
+  group_by(Tipo) %>%
+  mutate(prop = n / sum(n))
+
+# =========================================================
+# 5. Configuración de imputación múltiple (mice)
+# =========================================================
+library(mice)
+colSums(is.na(data))
+# Inicialización
+ini <- mice(data, maxit = 0, print = FALSE)
+meth <- ini$method
+
+# Identificar tipos
+vars_cuant  <- names(data)[sapply(data, is.numeric)]
+vars_factor <- names(data)[sapply(data, is.factor)]
+
+# Asignar métodos
+meth[vars_cuant] <- "pmm"
+
+vars_binarias <- vars_factor[sapply(data[vars_factor], nlevels) == 2]
+meth[vars_binarias] <- "cart"
+
+vars_poli <- vars_factor[sapply(data[vars_factor], nlevels) > 2]
+meth[vars_poli] <- "cart"
+
+# No imputar variables sin NA
+meth[colSums(is.na(data)) == 0] <- ""
+
+# =========================================================
+# 6. Ejecutar imputación
+# =========================================================
+set.seed(123)
+
+imp <- mice(data,
+            m = 10,
+            method = meth,
+            maxit = 50,
+            seed = 500)
+
+# Diagnóstico de convergencia
+plot(imp)
+
+# Densidades de ejemplo
+densityplot(imp, ~ CACAO_YIELD)
+densityplot(imp, ~ ALTITUDE)
+densityplot(imp, ~ FARM_AREA)
+densityplot(imp, ~ AREA_CACAO)
+densityplot(imp, ~ HYBRID_AREA)
+
+# =========================================================
+# 7. Base imputada final
+# =========================================================
+data_imputed <- complete(imp, action = 1)
+
+summary(data_imputed)
+meth[vars_factor]
+write.csv(data_imputed,
+          "Cocoa_socioeconomic_imputed.csv",
+          row.names = FALSE)
+
+
+```
 
 ```{r cars}
-summary(cars)
+#Renombrando las variables que presentan incosnistencias en su nombre
+data1 <- read.csv("Cocoa_socioeconomic_imputed.csv",
+                 stringsAsFactors = FALSE,
+                 sep = ",")
+
+
+colnames(data1) <-  c("ALTITUDE","AGE_PRODUCER","FARM_AREA","MUNICIPALITY_DISTANCE","CATTLE_NUMBER","FARM_INCOME%","YEAR_EXPERIENCE_CACAO","MONILIA_DAMAGE%","BROOM_DAMAGE%","BPR_DAMAGE%","AREA_CACAO","HYB_AREA_<20_YEARS","AREA_HYB_>20_YEARS","HYBRID_YIELD_>5","HYB_AGE","CLONE_AREA","CLONE_AREA_<3_YEARS","CLONE_AREA_>3_YEARS","CLONE_YIELD_>5_YEARS","CLONE_AGE","CACAO_YIELD","FERMENTATION_DAYS","PRUNING_SHEARS","HYBRID_AREA","HYBRID%","GENDER_PRODUCER","PRODUCER_EDUCATIV_LEVEL","ROAD_ACCESS","OWN_TRANSP","TRANSP_TYPE","ROAD_DISTANCE","MAIN_INCOME","1ST_INCOME","2ND_INCOME","3RD_INCOME","BANK_CREDIT","CACAO_TENURE","CACAO_TECHNOLOGY","PRUNING_FREQUENCY","INORGANIC_FERT","ORGANIC_FERT","HAND_WEEDING","MECHANICAL_WEED_CONTROL","HERBICIDE_APPLICATION","WEED_CONTROL_FREQUENCY","HARVEST_FREQUENCY","FPR_CONTROL_FREQUENCY","WB_CONTROL_FREQUENCY","ANOTHER_PESTS","FERMENTATION_METHOD","DRYING_INFRASTRUCTURE","PAVED_ROAD","AQUEDUCT","SCHOOL","ELECTRICITY","HEALTH_CENTER","TELEPHONY","TECHNICAL_ASSISTANCE","ASSOCIATION","TRAINING","LOADING_EQUIPMENT","MOTOR_PUMP","CHAINSAW","SCALE","PRUNING_SHEARS","SCYTHE","WALL_HOUSE","CEILING","FLOOR","AQUEDUCT_WATER","OTHER_WATER_SOURCE","LIGHT","PHONE","GAS","STOVE_ENERGY")
+
+data1
+
+write.csv(data1,
+          "Cocoa_socioeconomic_imputed_namesOK.csv",
+          row.names = FALSE)
+
 ```
-
-## Including Plots
-
-You can also embed plots, for example:
 
 ```{r pressure, echo=FALSE}
-plot(pressure)
+# ==============================
+# 1. Cargar datos
+# ==============================
+data <- read.csv("Cocoa_socioeconomic_imputed.csv", 
+                 stringsAsFactors = FALSE, 
+                 sep = ",")
+str(data)
+# ==============================
+# 2. Identificar tipos de variables
+# ==============================
+
+# Variables cuantitativas
+vars_cuant <- sapply(data, is.numeric)
+
+# Variables cualitativas
+vars_cuali <- sapply(data, function(x) is.character(x) | is.factor(x))
+
+data_cuant <- data[, vars_cuant]
+data_cuali <- data[, vars_cuali]
+
+# ==============================
+# 3. Estadística descriptiva cuantitativas (versión robusta)
+# ==============================
+
+if(ncol(data_cuant) > 0){
+
+  desc_cuant <- data.frame(
+    Variable = names(data_cuant),
+    N = sapply(data_cuant, function(x) sum(!is.na(x))),
+    Media = sapply(data_cuant, function(x) mean(x, na.rm = TRUE)),
+    SD = sapply(data_cuant, function(x) sd(x, na.rm = TRUE)),
+    Min = sapply(data_cuant, function(x) min(x, na.rm = TRUE)),
+    P25 = sapply(data_cuant, function(x) as.numeric(quantile(x, 0.25, na.rm = TRUE))),
+    Mediana = sapply(data_cuant, function(x) median(x, na.rm = TRUE)),
+    P75 = sapply(data_cuant, function(x) as.numeric(quantile(x, 0.75, na.rm = TRUE))),
+    Max = sapply(data_cuant, function(x) max(x, na.rm = TRUE))
+  )
+
+  # Coeficiente de variación (evitando división por 0)
+  desc_cuant$CV_percent <- with(desc_cuant, 
+                                 ifelse(Media == 0, NA, (SD / Media) * 100))
+
+  # Redondear solo columnas numéricas
+  desc_cuant[ , sapply(desc_cuant, is.numeric)] <- 
+    round(desc_cuant[ , sapply(desc_cuant, is.numeric)], 2)
+
+} else {
+  message("No hay variables numéricas detectadas.")
+}
+
+
+# ==============================
+# 4. Distribución de frecuencias cualitativas
+# ==============================
+
+library(dplyr)
+
+freq_cuali <- lapply(names(data_cuali), function(var){
+  
+  tabla <- data_cuali %>%
+    count(.data[[var]]) %>%
+    mutate(Variable = var,
+           Porcentaje = round(n / sum(n) * 100, 2)) %>%
+    rename(Categoria = 1,
+           Frecuencia = n)
+  
+  return(tabla)
+})
+
+tabla_cuali <- bind_rows(freq_cuali) %>%
+  select(Variable, Categoria, Frecuencia, Porcentaje)
+
+# ==============================
+# 5. Resultados finales
+# ==============================
+
+desc_cuant
+tabla_cuali
+
+write.csv2(desc_cuant, "Descriptivas_Cuantitativas.csv", row.names = FALSE)
+write.csv2(tabla_cuali, "Frecuencias_Cualitativas.csv", row.names = FALSE)
+
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+```{r pressure, echo=FALSE}
+# ==============================
+# 6. Análisis bivariado 
+# ==============================
+
+#Análisis bivariado cuantitativas
+data1 <- read.csv("Cocoa_socioeconomic_imputed.csv",
+                 stringsAsFactors = FALSE,
+                 sep = ",")
+
+colnames(data1) <-  c("ALTITUDE","AGE_PRODUCER","FARM_AREA","MUNICIPALITY_DISTANCE","CATTLE_NUMBER","FARM_INCOME%","YEAR_EXPERIENCE_CACAO","MONILIA_DAMAGE%","BROOM_DAMAGE%","BPR_DAMAGE%","AREA_CACAO","HYB_AREA_<20_YEARS","AREA_HYB_>20_YEARS","HYBRID_YIELD_>5","HYB_AGE","CLONE_AREA","CLONE_AREA_<3_YEARS","CLONE_AREA_>3_YEARS","CLONE_YIELD_>5_YEARS","CLONE_AGE","CACAO_YIELD","FERMENTATION_DAYS","PRUNING_SHEARS","HYBRID_AREA","HYBRID%","GENDER_PRODUCER","PRODUCER_EDUCATIV_LEVEL","ROAD_ACCESS","OWN_TRANSP","TRANSP_TYPE","ROAD_DISTANCE","MAIN_INCOME","1ST_INCOME","2ND_INCOME","3RD_INCOME","BANK_CREDIT","CACAO_TENURE","CACAO_TECHNOLOGY","PRUNING_FREQUENCY","INORGANIC_FERT","ORGANIC_FERT","HAND_WEEDING","MECHANICAL_WEED_CONTROL","HERBICIDE_APPLICATION","WEED_CONTROL_FREQUENCY","HARVEST_FREQUENCY","FPR_CONTROL_FREQUENCY","WB_CONTROL_FREQUENCY","ANOTHER_PESTS","FERMENTATION_METHOD","DRYING_INFRASTRUCTURE","PAVED_ROAD","AQUEDUCT","SCHOOL","ELECTRICITY","HEALTH_CENTER","TELEPHONY","TECHNICAL_ASSISTANCE","ASSOCIATION","TRAINING","LOADING_EQUIPMENT","MOTOR_PUMP","CHAINSAW","SCALE","PRUNING_SHEARS","SCYTHE","WALL_HOUSE","CEILING","FLOOR","AQUEDUCT_WATER","OTHER_WATER_SOURCE","LIGHT","PHONE","GAS","STOVE_ENERGY")
+
+data_quant <- data1[, c(1:25)]
+
+# Correlation matrix
+cor(data_quant, method="spearman") 
+round(cor(data_quant),2)
+par(mfrow=c(1,1))
+correlat <- hist(cor(data_quant), main="Correlation matrix", col="gray90")
+correlat
+
+write.table(round(cor(data_quant), 2), 'Bivariada/correlac.xls', row.names = T, sep = '\t')
+cor_matrix <- cor(data_quant)
+write.table(ifelse(cor_matrix>= 0.7 | cor_matrix  <= -0.7, 'Yes', 'No'), 'Bivariada/correlac_Y-N_BIO.xls', row.names = T, sep = '\t')
+
+tiff('Bivariada/grafica_correlac.tif', width = 20, height = 20, units = 'cm', res = 300)#, compression = 'lzw')
+corrplot(cor(data_quant), type = 'lower', diag = F, tl.srt = 45, mar = c(3, 0.5, 2, 1),  title = 'Quantitative variables')
+dev.off()
+```
+
+```{r pressure, echo=FALSE}
+#Obteniendola matriz de correlación y el test de significancia
+corr <- round(cor(data_quant, method="spearman"), 2)
+pmat <- round(cor_pmat(corr), 3)
+
+corrplot <- ggcorrplot(
+  corr,
+  method = "square", #forma caixa de cada correlação
+  type = "lower",
+  ggtheme = ggplot2::theme_classic(),
+  title = "Quantitative variables",
+  show.legend = TRUE,
+  legend.title = "Corr",
+  show.diag = NULL,
+  colors = c("darkblue", "white", "red"),
+  outline.color = "black", #Cor externa da figura (method)
+  hc.order = FALSE, #Ordena os valores
+  hc.method = "complete",
+  lab = T, #Inclui os valores da correlação
+  lab_col = "black",
+  lab_size = 3.3,
+  p.mat = pmat, #Inclui a significância
+  sig.level = 0.05,
+  insig = "pch", #Blank= deixa o square em branco
+  pch = 4,
+  pch.col = "gray", #Cor das X
+  pch.cex = 8,
+  digits=1) + theme(axis.text.x = element_text(size = 8, color = "black", angle = 45, hjust = 1), axis.text.y = element_text(size = 8, color = "black"))
+corrplot
+
+
+ggsave("Bivariada/plot.png", plot = corrplot, dpi = 600, bg = "white")
+
+```
+
+
