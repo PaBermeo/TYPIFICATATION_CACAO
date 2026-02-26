@@ -13,7 +13,7 @@ knitr::opts_chunk$set(
 )
 
 #1. Librerias
-pacman::p_load(corrplot, dplyr, ggcorrplot, mice, naniar, tidyverse, VIM)
+pacman::p_load(corrplot, dplyr, FactoMineR, factoextra, ggcorrplot, mice, naniar, tidyverse, VIM)
 
 getwd()
 ```
@@ -301,9 +301,10 @@ write.csv2(tabla_cuali, "Frecuencias_Cualitativas.csv", row.names = FALSE)
 #Análisis bivariado cuantitativas
 data1 <- read.csv("Cocoa_socioeconomic_imputed.csv",
                  stringsAsFactors = FALSE,
-                 sep = ",")
+                 sep = ";")
 
 colnames(data1) <-  c("ALTITUDE","AGE_PRODUCER","FARM_AREA","MUNICIPALITY_DISTANCE","CATTLE_NUMBER","FARM_INCOME%","YEAR_EXPERIENCE_CACAO","MONILIA_DAMAGE%","BROOM_DAMAGE%","BPR_DAMAGE%","AREA_CACAO","HYB_AREA_<20_YEARS","AREA_HYB_>20_YEARS","HYBRID_YIELD_>5","HYB_AGE","CLONE_AREA","CLONE_AREA_<3_YEARS","CLONE_AREA_>3_YEARS","CLONE_YIELD_>5_YEARS","CLONE_AGE","CACAO_YIELD","FERMENTATION_DAYS","PRUNING_SHEARS","HYBRID_AREA","HYBRID%","GENDER_PRODUCER","PRODUCER_EDUCATIV_LEVEL","ROAD_ACCESS","OWN_TRANSP","TRANSP_TYPE","ROAD_DISTANCE","MAIN_INCOME","1ST_INCOME","2ND_INCOME","3RD_INCOME","BANK_CREDIT","CACAO_TENURE","CACAO_TECHNOLOGY","PRUNING_FREQUENCY","INORGANIC_FERT","ORGANIC_FERT","HAND_WEEDING","MECHANICAL_WEED_CONTROL","HERBICIDE_APPLICATION","WEED_CONTROL_FREQUENCY","HARVEST_FREQUENCY","FPR_CONTROL_FREQUENCY","WB_CONTROL_FREQUENCY","ANOTHER_PESTS","FERMENTATION_METHOD","DRYING_INFRASTRUCTURE","PAVED_ROAD","AQUEDUCT","SCHOOL","ELECTRICITY","HEALTH_CENTER","TELEPHONY","TECHNICAL_ASSISTANCE","ASSOCIATION","TRAINING","LOADING_EQUIPMENT","MOTOR_PUMP","CHAINSAW","SCALE","PRUNING_SHEARS","SCYTHE","WALL_HOUSE","CEILING","FLOOR","AQUEDUCT_WATER","OTHER_WATER_SOURCE","LIGHT","PHONE","GAS","STOVE_ENERGY")
+
 
 data_quant <- data1[, c(1:25)]
 
@@ -355,6 +356,33 @@ corrplot
 
 
 ggsave("Bivariada/plot.png", plot = corrplot, dpi = 600, bg = "white")
+
+```
+
+
+```{r pressure, echo=FALSE}
+#Análisis bivariado cuantitativas
+data1 <- read.csv("Cocoa_socioeconomic_imputed.csv",
+                 stringsAsFactors = FALSE,
+                 sep = ";")
+
+colnames(data1) <-  c("ALTITUDE","AGE_PRODUCER","FARM_AREA","MUNICIPALITY_DISTANCE","CATTLE_NUMBER","FARM_INCOME%","YEAR_EXPERIENCE_CACAO","MONILIA_DAMAGE%","BROOM_DAMAGE%","BPR_DAMAGE%","AREA_CACAO","HYB_AREA_<20_YEARS","AREA_HYB_>20_YEARS","HYBRID_YIELD_>5","HYB_AGE","CLONE_AREA","CLONE_AREA_<3_YEARS","CLONE_AREA_>3_YEARS","CLONE_YIELD_>5_YEARS","CLONE_AGE","CACAO_YIELD","FERMENTATION_DAYS","PRUNING_SHEARS","HYBRID_AREA","HYBRID%","GENDER_PRODUCER","PRODUCER_EDUCATIV_LEVEL","ROAD_ACCESS","OWN_TRANSP","TRANSP_TYPE","ROAD_DISTANCE","MAIN_INCOME","1ST_INCOME","2ND_INCOME","3RD_INCOME","BANK_CREDIT","CACAO_TENURE","CACAO_TECHNOLOGY","PRUNING_FREQUENCY","INORGANIC_FERT","ORGANIC_FERT","HAND_WEEDING","MECHANICAL_WEED_CONTROL","HERBICIDE_APPLICATION","WEED_CONTROL_FREQUENCY","HARVEST_FREQUENCY","FPR_CONTROL_FREQUENCY","WB_CONTROL_FREQUENCY","ANOTHER_PESTS","FERMENTATION_METHOD","DRYING_INFRASTRUCTURE","PAVED_ROAD","AQUEDUCT","SCHOOL","ELECTRICITY","HEALTH_CENTER","TELEPHONY","TECHNICAL_ASSISTANCE","ASSOCIATION","TRAINING","LOADING_EQUIPMENT","MOTOR_PUMP","CHAINSAW","SCALE","PRUNING_SHEARS","SCYTHE","WALL_HOUSE","CEILING","FLOOR","AQUEDUCT_WATER","OTHER_WATER_SOURCE","LIGHT","PHONE","GAS","STOVE_ENERGY")
+
+data_quali <- data1[, 26:75] 
+data_quali <- as.data.frame(lapply(data_quali, as.factor))
+
+#Ejecutando ACM
+res.mca <- MCA(data_quali, ncp = 5, graph = FALSE)
+
+# Gráfico de las categorías y los individuos
+fviz_mca_biplot(res.mca, repel = T, ggtheme = theme_minimal(), title = "Biplot MCA")
+
+# Visualizar solo las categorías de las variables
+fviz_mca_var(res.mca, choice = "mca.cor", repel = TRUE, ggtheme = theme_minimal())
+
+# 5. Ver autovalores (Varianza explicada por dimensión)
+fviz_screeplot(res.mca, addlabels = T, ylim = c(0, 45))
+
 
 ```
 
