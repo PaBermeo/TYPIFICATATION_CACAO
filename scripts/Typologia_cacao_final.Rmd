@@ -210,12 +210,13 @@ write.csv(data1,
 
 ```{r pressure, echo=FALSE}
 # ==============================
-# 1. Cargar datos
+# 1. Analsiis descriptivo - cargar datos
 # ==============================
-data <- read.csv("Cocoa_socioeconomic_imputed.csv", 
-                 stringsAsFactors = FALSE, 
-                 sep = ",")
+data <- read.csv("Cocoa_socioeconomic_imputed_04_marzo_2026.csv", 
+                 stringsAsFactors = TRUE, 
+                 sep = ";")
 str(data)
+dim(data)
 # ==============================
 # 2. Identificar tipos de variables
 # ==============================
@@ -279,7 +280,7 @@ freq_cuali <- lapply(names(data_cuali), function(var){
 })
 
 tabla_cuali <- bind_rows(freq_cuali) %>%
-  select(Variable, Categoria, Frecuencia, Porcentaje)
+  dplyr::select(Variable, Categoria, Frecuencia, Porcentaje)
 
 # ==============================
 # 5. Resultados finales
@@ -288,8 +289,8 @@ tabla_cuali <- bind_rows(freq_cuali) %>%
 desc_cuant
 tabla_cuali
 
-write.csv2(desc_cuant, "Descriptivas_Cuantitativas.csv", row.names = FALSE)
-write.csv2(tabla_cuali, "Frecuencias_Cualitativas.csv", row.names = FALSE)
+write.csv2(desc_cuant, "Descriptivas_Cuantitativas_18_03_2026.csv", row.names = FALSE)
+write.csv2(tabla_cuali, "Frecuencias_Cualitativas_18_03_2026.csv", row.names = FALSE)
 
 ```
 
@@ -344,18 +345,18 @@ corrplot <- ggcorrplot(
   hc.method = "complete",
   lab = T, #Inclui os valores da correlação
   lab_col = "black",
-  lab_size = 3.3,
+  lab_size = 2,
   p.mat = pmat, #Inclui a significância
   sig.level = 0.05,
   insig = "pch", #Blank= deixa o square em branco
-  pch = 4,
+  pch = 3,
   pch.col = "gray", #Cor das X
-  pch.cex = 8,
+  pch.cex = 2,
   digits=1) + theme(axis.text.x = element_text(size = 8, color = "black", angle = 45, hjust = 1), axis.text.y = element_text(size = 8, color = "black"))
 corrplot
 
 
-ggsave("Bivariada/plot.png", plot = corrplot, dpi = 600, bg = "white")
+ggsave("Bivariada/plot2.png", plot = corrplot, dpi = 600, bg = "white")
 
 ```
 
@@ -386,4 +387,57 @@ fviz_screeplot(res.mca, addlabels = T, ylim = c(0, 45))
 
 ```
 
+```{r pressure, echo=FALSE}
+#Análisis bivariado cuantitativas
+data1 <- read.csv("Cocoa_socioeconomic_imputed_VF1.csv",
+                 stringsAsFactors = FALSE,
+                 sep = ";")
 
+#colnames(data1) <-  c("ALTITUDE","AGE_PRODUCER","FARM_AREA","MUNICIPALITY_DISTANCE","CATTLE_NUMBER","FARM_INCOME%","YEAR_EXPERIENCE_
+
+#Ejecutando ACM
+TYP <- FAMD(data1, ncp = 5, graph = FALSE)
+summary(TYP)
+
+TYP2 <-  dimdesc(TYP, axes = 1:5)
+
+write.csv(TYP$var$contrib, "variables_contrib_VF1.csv", row.names = TRUE)
+
+write.csv(TYP$var$cos2, "variables_cos2_VF1.csv", row.names = TRUE)
+
+write.csv(TYP$var$coord, "variables_coord_VF1.csv", row.names = TRUE)
+ 
+```
+
+
+```{r pressure, echo=FALSE}
+# Combinar todo (quanti + quali)
+dimdesc_all <- do.call(rbind, lapply(seq_along(desc), function(i) {
+  res <- list()
+  # Cuantitativas
+  if (!is.null(desc[[i]]$quanti)) {
+    res$quanti <- cbind(
+      Dimension = paste0("Dim", i),
+      Tipo = "Cuantitativa",
+      Variable = rownames(desc[[i]]$quanti),
+      desc[[i]]$quanti
+    )
+  }
+  # Cualitativas
+  if (!is.null(desc[[i]]$quali)) {
+    res$quali <- cbind(
+      Dimension = paste0("Dim", i),
+      Tipo = "Cualitativa",
+      Variable = rownames(desc[[i]]$quali),
+      desc[[i]]$quali
+    )
+  }
+  do.call(rbind, res)
+}))
+ 
+# Guardar
+write.csv(dimdesc_all, "dimdesc_completo.csv", row.names = FALSE)
+
+
+ 
+```
