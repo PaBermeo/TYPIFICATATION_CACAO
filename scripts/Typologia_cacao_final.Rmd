@@ -388,27 +388,145 @@ fviz_screeplot(res.mca, addlabels = T, ylim = c(0, 45))
 ```
 
 ```{r pressure, echo=FALSE}
-#Análisis bivariado cuantitativas
-data1 <- read.csv("Cocoa_socioeconomic_imputed_VF1.csv",
+
+#Análisis FAMD y HCPC versión final, luego de la selección de variables y fincas para tipificar
+
+# =========================================================
+# 1. Cargar datos
+# =========================================================
+
+data1 <- read.csv("Cocoa_socioeconomic_imputed_VF5.csv",
                  stringsAsFactors = FALSE,
                  sep = ";")
 
-#colnames(data1) <-  c("ALTITUDE","AGE_PRODUCER","FARM_AREA","MUNICIPALITY_DISTANCE","CATTLE_NUMBER","FARM_INCOME%","YEAR_EXPERIENCE_
+colnames(data1) <- c("ALTITUDE", "FPR_DAMAGE_%", "BROOM_DAMAGE_%", "BPR_DAMAGE_%", 
+               "AREA_CACAO", "HYB_AGE", "CLONE_AREA", "CACAO_YIELD", 
+               "HYBRID_AREA", "INCOME_DIVERSIFICATION", "CACAO_TECHNOLOGY", "INORGANIC_FERT", 
+               "ORGANIC_FERT", "WEED_CONTROL_FREQUENCY", "HARVEST_FREQUENCY", "FPR_CONTROL_FREQUENCY", 
+               "WB_CONTROL_FREQUENCY", "TECHNICAL_ASSISTANCE")
 
-#Ejecutando ACM
-TYP <- FAMD(data1, ncp = 5, graph = FALSE)
+# =========================================================
+# 2. Generar FAMD
+# =========================================================
+
+TYP <- FAMD(data1, ncp = 10, graph = T, sup.var = NULL,
+               ind.sup = NULL, axes = c(1,2), row.w = NULL)
 summary(TYP)
 
-TYP2 <-  dimdesc(TYP, axes = 1:5)
+#TYP$quali.var
 
-write.csv(TYP$var$contrib, "variables_contrib_VF1.csv", row.names = TRUE)
 
-write.csv(TYP$var$cos2, "variables_cos2_VF1.csv", row.names = TRUE)
-
-write.csv(TYP$var$coord, "variables_coord_VF1.csv", row.names = TRUE)
+# =========================================================
+# 2. Generar HCPC
+# =========================================================
  
+res.hcfamd <- HCPC(TYP, graph = F, nb.clust= -1, method="ward", description = T)
+
+summary(res.hcfamd)
+
+Indiv_cluster <- table(res.hcfamd$data.clust$clust)
+df_cluster <- as.data.frame(Indiv_cluster)
+colnames(df_cluster) <- c("Cluster", "Frecuencia")
+
+
+res.hcfamd$desc.var
+
+fviz_dend(res.hcfamd,
+          cex = 0.7,                     # Label size
+          palette = "jco",               # Color palette see ?ggpubr::ggpar
+          rect = TRUE, rect_fill = TRUE, # Add rectangle around groups
+          rect_border = "jco",           # Rectangle color
+          labels_track_height = 0.8      # Augment the room for labels
+          )
+
+fviz_cluster(res.hcfamd,
+  geom = "point",
+  show.clust.cent = TRUE,
+  ellipse.type = "norm",
+  palette = "jco",
+  ggtheme = theme_minimal()
+)
+
+
+TYP2 <-  dimdesc(TYP, axes = 1:5)
+# 
+fviz_famd_ind(TYP)
+
+
+
+write.csv(TYP$var$contrib, "scripts/Salidas_Typificac_V5/variables_contrib_VF5.csv", row.names = TRUE)
+
+write.csv(TYP$var$cos2, "scripts/Salidas_Typificac_V5/variables_cos2_VF5.csv", row.names = TRUE)
+
+write.csv(TYP$var$coord, "scripts/Salidas_Typificac_V5/variables_coord_VF5.csv", row.names = TRUE)
+
+write.csv(df_cluster, "scripts/Salidas_Typificac_V5/conteo_clusters.csv", row.names = FALSE)
+
+
+
+#Guardar summary del HCPC
+sink("scripts/Salidas_Typificac_V5/summary_hcfamd.txt")
+summary(res.hcfamd)
+sink()
+
+sink("scripts/Salidas_Typificac_V5/categoricalvar_cluster.txt")
+res.hcfamd$desc.var
+sink()
+ 
+sink("scripts/Salidas_Typificac_V5/dataindv_clust.txt")
+res.hcfamd$data.clust
+sink()
+
 ```
 
+```{r pressure, echo=FALSE}
+##########Definición de número de clústers
+
+    #Inerncia explicada por los grupos
+res.hcfamd$call$t$height 
+#resultado NULL
+
+#Método Sillouette
+library(cluster)
+
+coords <- TYP$ind$coord
+
+sil <- numeric(10)
+
+for(k in 2:10){
+  cl <- cutree(res.hcfamd$call$t$tree, k = k)
+  sil[k] <- mean(silhouette(cl, dist(coords))[, 3])
+}
+
+sil
+which.max(sil)
+
+#Resultado: 2
+
+#Gap statistic
+fviz_nbclust(
+  TYP$ind$coord,
+  FUNcluster = hcut,
+  method = "gap_stat"
+)
+
+#
+fviz_cluster(
+  list(
+    data = res.famd$ind$coord,
+    cluster = res.hcfamd$data.clust$clust
+  ),
+  geom = "point",
+  show.clust.cent = TRUE,
+  ellipse.type = "norm",
+  palette = "jco",
+  ggtheme = theme_minimal()
+)
+
+#2
+
+
+```
 
 ```{r pressure, echo=FALSE}
 # Combinar todo (quanti + quali)
